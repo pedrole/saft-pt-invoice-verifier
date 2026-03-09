@@ -83,12 +83,19 @@ class SaftParserService
      * Parse InvoiceNo to extract series and sequential number.
      * Format: "TipoDocumento Série/Sequencial" e.g. "FT A/1"
      *
+     * The series key intentionally includes the document type prefix
+     * (e.g. "FT A") so that documents of different types that share the
+     * same letter (e.g. "FAC A" vs "FS A") are treated as independent
+     * series, each with their own hash chain.
+     *
      * @return array{string, int} [series, sequentialNumber]
      */
     private function parseInvoiceNo(string $invoiceNo): array
     {
-        // Pattern: TYPE SERIES/SEQUENTIAL (e.g., "FT A/1", "FS B/12")
-        if (preg_match('/^[A-Z]+\s+([^\/]+)\/(\d+)$/', $invoiceNo, $matches)) {
+        // Pattern: TYPE SERIES/SEQUENTIAL (e.g., "FT A/1", "FS B/12", "FAC A/1")
+        // Capture "TYPE SERIES" as a single series key so that "FT A" and "FS A"
+        // remain separate series with independent hash chains.
+        if (preg_match('/^([A-Z]+\s+[^\/]+)\/(\d+)$/', $invoiceNo, $matches)) {
             return [$matches[1], (int) $matches[2]];
         }
 

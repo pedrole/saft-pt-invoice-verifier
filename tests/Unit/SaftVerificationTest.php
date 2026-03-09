@@ -126,17 +126,17 @@ XML;
 
         $invoiceA1 = $invoices[0];
         $this->assertEquals('FT A/1', $invoiceA1->invoiceNo);
-        $this->assertEquals('A', $invoiceA1->series);
+        $this->assertEquals('FT A', $invoiceA1->series);
         $this->assertEquals(1, $invoiceA1->sequentialNumber);
 
         $invoiceA2 = $invoices[1];
         $this->assertEquals('FT A/2', $invoiceA2->invoiceNo);
-        $this->assertEquals('A', $invoiceA2->series);
+        $this->assertEquals('FT A', $invoiceA2->series);
         $this->assertEquals(2, $invoiceA2->sequentialNumber);
 
         $invoiceB1 = $invoices[2];
         $this->assertEquals('FT B/1', $invoiceB1->invoiceNo);
-        $this->assertEquals('B', $invoiceB1->series);
+        $this->assertEquals('FT B', $invoiceB1->series);
         $this->assertEquals(1, $invoiceB1->sequentialNumber);
     }
 
@@ -146,10 +146,10 @@ XML;
         $invoices = $this->parser->parseInvoices($this->getTestSaftXml());
         $seriesResults = $this->verifier->verify($invoices);
 
-        // Find series A
+        // Find series "FT A"
         $seriesA = null;
         foreach ($seriesResults as $s) {
-            if ($s->series === 'A') {
+            if ($s->series === 'FT A') {
                 $seriesA = $s;
                 break;
             }
@@ -170,8 +170,8 @@ XML;
         $this->assertCount(2, $seriesResults);
 
         $seriesNames = array_map(fn ($s) => $s->series, $seriesResults);
-        $this->assertContains('A', $seriesNames);
-        $this->assertContains('B', $seriesNames);
+        $this->assertContains('FT A', $seriesNames);
+        $this->assertContains('FT B', $seriesNames);
     }
 
         #[\PHPUnit\Framework\Attributes\Test]
@@ -182,7 +182,7 @@ XML;
 
         $seriesA = null;
         foreach ($seriesResults as $s) {
-            if ($s->series === 'A') {
+            if ($s->series === 'FT A') {
                 $seriesA = $s;
                 break;
             }
@@ -271,5 +271,138 @@ XML;
     {
         $seriesResults = $this->verifier->verify([]);
         $this->assertCount(0, $seriesResults);
+    }
+
+        #[\PHPUnit\Framework\Attributes\Test]
+    public function it_treats_same_letter_different_type_as_separate_series(): void
+    {
+        // FAC A/1 and FAC A/2 belong to series "FAC A".
+        // FS A/1 shares the letter "A" but is a different type, so it belongs to
+        // series "FS A" — a completely independent chain.
+        // Therefore FS A/1 must be marked NotVerifiable (1st of its own series).
+        $xml = <<<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<AuditFile xmlns="urn:OECD:StandardAuditFile-Tax:PT_1.04_01">
+  <Header>
+    <AuditFileVersion>1.04_01</AuditFileVersion>
+    <CompanyID>999999990</CompanyID>
+    <TaxRegistrationNumber>999999990</TaxRegistrationNumber>
+    <TaxAccountingBasis>F</TaxAccountingBasis>
+    <CompanyName>Empresa Teste Lda</CompanyName>
+    <FiscalYear>2024</FiscalYear>
+    <StartDate>2024-01-01</StartDate>
+    <EndDate>2024-12-31</EndDate>
+    <CurrencyCode>EUR</CurrencyCode>
+    <DateCreated>2024-12-31</DateCreated>
+    <TaxEntity>Global</TaxEntity>
+    <ProductCompanyTaxID>123456789</ProductCompanyTaxID>
+    <SoftwareCertificateNumber>9999</SoftwareCertificateNumber>
+    <ProductID>SoftwareTeste/SoftwareTeste</ProductID>
+    <ProductVersion>1.0</ProductVersion>
+  </Header>
+  <SourceDocuments>
+    <SalesInvoices>
+      <NumberOfEntries>3</NumberOfEntries>
+      <TotalDebit>0.00</TotalDebit>
+      <TotalCredit>0.00</TotalCredit>
+      <Invoice>
+        <InvoiceNo>FAC A/1</InvoiceNo>
+        <Hash>aGFzaEZBQ0Ex</Hash>
+        <HashControl>1</HashControl>
+        <Period>1</Period>
+        <InvoiceDate>2024-02-01</InvoiceDate>
+        <InvoiceType>FAC</InvoiceType>
+        <SystemEntryDate>2024-02-01T09:00:00</SystemEntryDate>
+        <CustomerID>C001</CustomerID>
+        <DocumentTotals>
+          <TaxPayable>23.00</TaxPayable>
+          <NetTotal>100.00</NetTotal>
+          <GrossTotal>123.00</GrossTotal>
+        </DocumentTotals>
+      </Invoice>
+      <Invoice>
+        <InvoiceNo>FAC A/2</InvoiceNo>
+        <Hash>aGFzaEZBQ0Ey</Hash>
+        <HashControl>1</HashControl>
+        <Period>1</Period>
+        <InvoiceDate>2024-02-05</InvoiceDate>
+        <InvoiceType>FAC</InvoiceType>
+        <SystemEntryDate>2024-02-05T11:00:00</SystemEntryDate>
+        <CustomerID>C001</CustomerID>
+        <DocumentTotals>
+          <TaxPayable>46.00</TaxPayable>
+          <NetTotal>200.00</NetTotal>
+          <GrossTotal>246.00</GrossTotal>
+        </DocumentTotals>
+      </Invoice>
+      <Invoice>
+        <InvoiceNo>FS A/1</InvoiceNo>
+        <Hash>aGFzaEZTQTE=</Hash>
+        <HashControl>1</HashControl>
+        <Period>1</Period>
+        <InvoiceDate>2024-02-10</InvoiceDate>
+        <InvoiceType>FS</InvoiceType>
+        <SystemEntryDate>2024-02-10T14:00:00</SystemEntryDate>
+        <CustomerID>C002</CustomerID>
+        <DocumentTotals>
+          <TaxPayable>0.00</TaxPayable>
+          <NetTotal>50.00</NetTotal>
+          <GrossTotal>50.00</GrossTotal>
+        </DocumentTotals>
+      </Invoice>
+    </SalesInvoices>
+  </SourceDocuments>
+</AuditFile>
+XML;
+
+        $invoices = $this->parser->parseInvoices($xml);
+
+        // Verify series extraction
+        $this->assertEquals('FAC A', $invoices[0]->series);
+        $this->assertEquals('FAC A', $invoices[1]->series);
+        $this->assertEquals('FS A',  $invoices[2]->series);
+
+        $seriesResults = $this->verifier->verify($invoices);
+
+        // There must be exactly 2 series: "FAC A" and "FS A"
+        $this->assertCount(2, $seriesResults);
+        $seriesNames = array_map(fn ($s) => $s->series, $seriesResults);
+        $this->assertContains('FAC A', $seriesNames);
+        $this->assertContains('FS A', $seriesNames);
+
+        // Find each series result
+        $facA = null;
+        $fsA  = null;
+        foreach ($seriesResults as $s) {
+            if ($s->series === 'FAC A') {
+                $facA = $s;
+            }
+            if ($s->series === 'FS A') {
+                $fsA = $s;
+            }
+        }
+
+        $this->assertNotNull($facA);
+        $this->assertNotNull($fsA);
+
+        // FAC A/1 — first of its series → not verifiable
+        $this->assertEquals(VerificationStatus::NotVerifiable, $facA->results[0]->status);
+        $this->assertEquals('FAC A/1', $facA->results[0]->invoice->invoiceNo);
+
+        // FAC A/2 — second; signature string must reference FAC A/1's hash
+        $this->assertEquals(
+            '2024-02-05;2024-02-05T11:00:00;FAC A/2;246.00;aGFzaEZBQ0Ex',
+            $facA->results[1]->signatureString
+        );
+
+        // FS A/1 — first of its OWN series → must also be not verifiable
+        $this->assertEquals(1, $fsA->totalDocuments);
+        $this->assertEquals(VerificationStatus::NotVerifiable, $fsA->results[0]->status);
+        $this->assertEquals('FS A/1', $fsA->results[0]->invoice->invoiceNo);
+        // Its signature string must use an empty previous hash (not FAC A/2's hash)
+        $this->assertEquals(
+            '2024-02-10;2024-02-10T14:00:00;FS A/1;50.00;',
+            $fsA->results[0]->signatureString
+        );
     }
 }
